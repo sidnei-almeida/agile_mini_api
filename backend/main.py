@@ -183,17 +183,45 @@ class TaskResponse(BaseModel):
 
 # Instância do FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 app = FastAPI()
 
 # Configuração do CORS para aceitar qualquer origem
+origins = ["*"]  # Permite todas as origens
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # Permite todos os métodos HTTP
+    allow_headers=["*"],  # Permite todos os cabeçalhos
+    expose_headers=["*"],  # Expõe todos os cabeçalhos
+    max_age=86400,  # Cache de preflight por 24 horas
 )
+
+# Adicionar cabeçalhos CORS a todas as respostas
+@app.middleware("http")
+async def add_cors_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    return response
+
+# Rota OPTIONS para lidar com preflight requests
+@app.options("/{full_path:path}")
+async def options_route(full_path: str):
+    return JSONResponse(
+        content="{}",
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            "Access-Control-Allow-Credentials": "true",
+        }
+    )
 
 # Criar as tabelas no banco de dados
 Base.metadata.create_all(bind=engine)
