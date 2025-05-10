@@ -1,14 +1,26 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import declarative_base, relationship
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Session
 from pydantic import BaseModel, validator
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-# Configuração do banco de dados (PostgreSQL no Render, SQLite local)
+# Instu00e2ncia do FastAPI
+app = FastAPI(title="API Agile Mini")
+
+# Configurau00e7u00e3o CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
+
+# Configurau00e7u00e3o do banco de dados (PostgreSQL no Render, SQLite local)
 # Verifica se estamos no Render (usando a variável de ambiente RENDER)
 if "RENDER" in os.environ:
     # Usar PostgreSQL no Render
@@ -19,8 +31,14 @@ if "RENDER" in os.environ:
     SQLALCHEMY_DATABASE_URL = db_url
     engine = create_engine(SQLALCHEMY_DATABASE_URL)
 else:
-    # Usar SQLite localmente
-    SQLALCHEMY_DATABASE_URL = "sqlite:///./agile_mini.db"
+    # Usar SQLite localmente - com caminho absoluto ou relativo
+    # Verificar se o banco existe na pasta atual, se não, usar na pasta pai
+    if os.path.exists('./agile_mini.db'):
+        SQLALCHEMY_DATABASE_URL = "sqlite:///./agile_mini.db"
+    else:
+        SQLALCHEMY_DATABASE_URL = "sqlite:///../agile_mini.db"
+        
+    print(f"Usando banco de dados: {SQLALCHEMY_DATABASE_URL}")
     engine = create_engine(
         SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
     )
@@ -443,24 +461,43 @@ def read_tasks(
     # Cálculo de atraso
     now = datetime.utcnow()
     task_responses = []
-    for t in tasks:
-        atrasada = False
-        if t.sprint_rel and t.sprint_rel.end_date and t.status != "Done":
-            if now > t.sprint_rel.end_date:
-                atrasada = True
-        task_responses.append(TaskResponse(
-            id=t.id,
-            title=t.title,
-            description=t.description,
-            status=t.status,
-            project=t.project,
-            sprint_id=t.sprint_id,
-            priority=t.priority,
-            created_at=t.created_at,
-            started_at=t.started_at,
-            completed_at=t.completed_at,
-            atrasada=atrasada
-        ))
+    
+    try:
+        print(f"Processando {len(tasks)} tarefas encontradas")
+        
+        for t in tasks:
+            try:
+                atrasada = False
+                
+                # Verificar sprint de forma segura
+                if hasattr(t, 'sprint_rel') and t.sprint_rel:
+                    if hasattr(t.sprint_rel, 'end_date') and t.sprint_rel.end_date:
+                        if t.status != "Done" and now > t.sprint_rel.end_date:
+                            atrasada = True
+                
+                # Criar resposta para esta tarefa
+                task_responses.append(TaskResponse(
+                    id=t.id,
+                    title=t.title,
+                    description=t.description,
+                    status=t.status,
+                    project=t.project,
+                    sprint_id=t.sprint_id,
+                    priority=t.priority,
+                    created_at=t.created_at,
+                    started_at=t.started_at,
+                    completed_at=t.completed_at,
+                    atrasada=atrasada
+                ))
+            except Exception as task_error:
+                print(f"Erro ao processar tarefa {t.id}: {str(task_error)}")
+                # Continuar processando outras tarefas
+        
+        print(f"Retornando {len(task_responses)} respostas de tarefas")
+    except Exception as e:
+        import traceback
+        print(f"Erro no endpoint /tasks: {str(e)}")
+        print(traceback.format_exc())
     return task_responses
 
 @app.get("/tasks/{task_id}", response_model=TaskResponse)
@@ -755,3 +792,229 @@ def get_project_tasks(project_id: int, db: Session = Depends(get_db)):
     # Busca todas as tarefas associadas a sprints do projeto
     tasks = db.query(Task).join(Sprint).filter(Sprint.project_id == project_id).all()
     return tasks
+
+
+# Endpoint para adicionar mais dados de demonstrau00e7u00e3o diversificados
+@app.get("/seed-more-data")
+def seed_more_data():
+    """Endpoint para criar mais dados de demonstrau00e7u00e3o com sprints e tarefas em diferentes estu00e1gios."""
+    try:
+        # Data atual e datas passadas/futuras para criar sprints em diferentes estu00e1gios
+        today = datetime.utcnow()
+        two_months_ago = today - timedelta(days=60)
+        
+        # Criar um novo projeto com nome u00fanico
+        db = SessionLocal()
+        
+        # Verificar se o projeto ju00e1 existe para evitar duplicau00e7u00e3o
+        project_name = f"Projeto Desenvolvimento {today.strftime('%Y%m%d')}"
+        existing_project = db.query(Project).filter(Project.name == project_name).first()
+        
+        if existing_project:
+            # Se existir, apenas retornar o projeto existente
+            project_id = existing_project.id
+            project = existing_project
+        else:
+            # Criar um novo projeto com datas realistas
+            project = Project(
+                name=project_name,
+                description="Um projeto de desenvolvimento com sprints em diferentes estu00e1gios e tarefas variadas",
+                status="Ativo",
+                start_date=two_months_ago,  # Iniciou 2 meses atru00e1s
+                end_date=today + timedelta(days=120)  # Termina daqui a 4 meses
+            )
+            
+            db.add(project)
+            db.commit()
+            db.refresh(project)
+            project_id = project.id
+        
+        # Criar 6 sprints em diferentes estu00e1gios (2 conclu00eddos, 1 em andamento, 3 planejados)
+        sprints = []
+        sprint_statuses = ["Concluído", "Concluído", "Ativo", "Planejado", "Planejado", "Planejado"]
+        
+        for i in range(6):
+            # Calcular datas do sprint: 2 sprints no passado, 1 atual, 3 futuros
+            if i < 2:  # Sprints passados (concluídos)
+                sprint_start = two_months_ago + timedelta(days=i*14)
+                sprint_end = sprint_start + timedelta(days=13)
+                status = "Concluído"
+            elif i == 2:  # Sprint atual
+                sprint_start = today - timedelta(days=7)  # Comeou00e7ou uma semana atru00e1s
+                sprint_end = sprint_start + timedelta(days=13)  # Dura duas semanas
+                status = "Ativo"
+            else:  # Sprints futuros
+                sprint_start = today + timedelta(days=(i-3)*14 + 7)  # Comeou00e7am apu00f3s o sprint atual
+                sprint_end = sprint_start + timedelta(days=13)
+                status = "Planejado"
+            
+            sprint = Sprint(
+                name=f"Sprint {i+1}",
+                start_date=sprint_start,
+                end_date=sprint_end,
+                status=status,
+                project_id=project_id
+            )
+            
+            db.add(sprint)
+            db.commit()
+            db.refresh(sprint)
+            sprints.append(sprint)
+        
+        # Criar tarefas para os sprints com diferentes estados
+        tasks_count = 0
+        status_options = {
+            "Concluído": ["A Fazer", "Em Andamento", "Concluído"],  # Para sprints concluídos
+            "Ativo": ["A Fazer", "Em Andamento", "Concluído"],  # Para sprint em andamento
+            "Planejado": ["A Fazer"]  # Para sprints planejados
+        }
+        
+        # Pesos para cada status conforme o estado do sprint
+        status_weights = {
+            "Concluído": [0.1, 0.2, 0.7],  # Maioria concluída em sprints finalizados
+            "Ativo": [0.3, 0.5, 0.2],  # Maioria em andamento no sprint atual
+            "Planejado": [1.0]  # Todas a fazer em sprints futuros
+        }
+        
+        # Nomes de tarefas mais realistas
+        task_prefixes = [
+            "Desenvolver", "Implementar", "Testar", "Corrigir", "Criar", 
+            "Atualizar", "Documentar", "Refatorar", "Otimizar", "Revisar"
+        ]
+        
+        task_subjects = [
+            "funcionalidade de login", "mu00f3dulo de relatu00f3rios", "integraau00e7u00e3o com API", 
+            "interface do usuu00e1rio", "banco de dados", "autenticaau00e7u00e3o", 
+            "componente de visualizaau00e7u00e3o", "sistema de notificaau00e7u00f5es", 
+            "mecanismo de busca", "processo de deploy", "algoritmo de recomendaau00e7u00e3o",
+            "cache de dados", "dashboard", "endpoint REST", "validaau00e7u00e3o de formulau00e1rios"
+        ]
+        
+        for sprint in sprints:
+            # Nu00famero de tarefas variam por sprint - mais em sprints em andamento
+            num_tasks = 12 if sprint.status == "Ativo" else (10 if sprint.status == "Concluído" else 8)
+            
+            for i in range(num_tasks):
+                # Escolher status da tarefa baseado no status do sprint
+                import random
+                import numpy as np
+                
+                # Selecionar status baseado nos pesos definidos para o tipo de sprint
+                status_options_for_sprint = status_options[sprint.status]
+                weights = status_weights[sprint.status]
+                status = np.random.choice(status_options_for_sprint, p=weights)
+                
+                # Gerar nomes de tarefas mais realistas
+                task_name = f"{random.choice(task_prefixes)} {random.choice(task_subjects)}"
+                
+                # Definir pontos e prioridade
+                priority = random.choice(["Baixa", "Mu00e9dia", "Alta"])
+                points = random.choice([1, 2, 3, 5, 8, 13])  # Escala Fibonacci
+                
+                # Definir datas com base no status
+                started_at = None
+                completed_at = None
+                
+                if status == "Em Andamento" or status == "Concluído":
+                    started_at = sprint.start_date + timedelta(days=random.randint(0, 3))
+                
+                if status == "Concluído":
+                    # Se concluído, definir data de conclusu00e3o entre a data de início e o fim do sprint
+                    if started_at:
+                        days_until_end = (sprint.end_date - started_at).days
+                        if days_until_end > 0:
+                            days_to_complete = random.randint(1, min(days_until_end, 7))  # No mu00e1ximo 7 dias para concluir
+                            completed_at = started_at + timedelta(days=days_to_complete)
+                        else:
+                            completed_at = sprint.end_date
+                
+                task = Task(
+                    title=task_name,
+                    description=f"Esta tarefa envolve {task_name.lower()} para o projeto {project.name}",
+                    status=status,
+                    priority=priority,
+                    points=points,
+                    project=str(project_id),
+                    sprint_id=sprint.id,
+                    started_at=started_at,
+                    completed_at=completed_at
+                )
+                
+                db.add(task)
+                db.commit()
+                tasks_count += 1
+        
+        db.close()
+        
+        return {
+            "success": True,
+            "message": "Dados adicionais criados com sucesso!",
+            "project": {"id": project_id, "name": project_name},
+            "sprints_count": len(sprints),
+            "tasks_count": tasks_count
+        }
+    except Exception as e:
+        import traceback
+        print(f"Erro ao criar dados adicionais: {str(e)}")
+        print(traceback.format_exc())
+        return {
+            "success": False,
+            "message": f"Erro ao criar dados adicionais: {str(e)}",
+            "traceback": traceback.format_exc()
+        }
+        
+# Endpoint de diagnu00f3stico para verificar o estado da API
+@app.get("/diagnostico")
+def diagnostico():
+    import os
+    import traceback
+    
+    try:
+        # Testar conexão com o banco de dados
+        db = SessionLocal()
+        # Tentar executar uma consulta simples
+        projects_count = db.query(Project).count()
+        db.close()
+        
+        # Verificar arquivos de banco de dados
+        current_dir = os.path.abspath('.')
+        parent_dir = os.path.abspath('..')
+        
+        files_info = {
+            'current_directory': current_dir,
+            'parent_directory': parent_dir,
+            'db_in_current': os.path.exists('./agile_mini.db'),
+            'db_in_parent': os.path.exists('../agile_mini.db'),
+            'connection_string': SQLALCHEMY_DATABASE_URL,
+            'projects_count': projects_count
+        }
+        
+        return {
+            'status': 'OK',
+            'message': 'API funcionando corretamente',
+            'database_info': files_info,
+            'cors_config': {
+                'allow_origins': ["*"],
+                'allow_credentials': True,
+                'allow_methods': ["*"],
+                'allow_headers': ["*"]
+            }
+        }
+    except Exception as e:
+        return {
+            'status': 'ERROR',
+            'message': str(e),
+            'traceback': traceback.format_exc()
+        }
+
+# Iniciar o servidor Uvicorn diretamente quando o arquivo for executado
+if __name__ == "__main__":
+    import uvicorn
+    
+    print("Iniciando servidor Agile Mini API...")
+    print("A API estaru00e1 disponu00edvel em: http://127.0.0.1:8000")
+    print("Acesse http://127.0.0.1:8000/diagnostico para verificar o estado da API")
+    print("Pressione CTRL+C para encerrar o servidor")
+    
+    # Inicia o servidor Uvicorn
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
