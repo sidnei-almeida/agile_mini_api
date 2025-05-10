@@ -33,6 +33,8 @@ class Project(Base):
     name = Column(String, nullable=False, unique=True)
     description = Column(String, nullable=True)
     status = Column(String, default="Ativo")  # Ativo, Concluído, Pausado
+    start_date = Column(DateTime, nullable=True)  # Data de início do projeto
+    end_date = Column(DateTime, nullable=True)  # Data de término prevista do projeto
     created_at = Column(DateTime, default=datetime.utcnow)
     sprints = relationship("Sprint", back_populates="project_rel")
 
@@ -69,6 +71,8 @@ class ProjectBase(BaseModel):
     name: str
     description: str = None
     status: str = "Ativo"
+    start_date: datetime = None
+    end_date: datetime = None
 
 class ProjectCreate(ProjectBase):
     pass
@@ -277,9 +281,17 @@ def list_sprints(db: Session = Depends(get_db)):
 def create_sprint(sprint: SprintCreate, db: Session = Depends(get_db)):
     # Verificar se o projeto existe, se um project_id foi fornecido
     if sprint.project_id:
+        # Buscar o projeto para verificar as datas
         project = db.query(Project).filter(Project.id == sprint.project_id).first()
         if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
+            raise HTTPException(status_code=404, detail="Projeto não encontrado")
+            
+        # Verificar se as datas do sprint estão dentro do período do projeto
+        if project.start_date and sprint.start_date < project.start_date:
+            raise HTTPException(status_code=400, detail="A data de início do sprint não pode ser anterior à data de início do projeto")
+            
+        if project.end_date and sprint.end_date > project.end_date:
+            raise HTTPException(status_code=400, detail="A data de término do sprint não pode ser posterior à data de término do projeto")
     
     db_sprint = Sprint(**sprint.dict())
     db.add(db_sprint)
@@ -500,6 +512,19 @@ def get_task(task_id: int, db: Session = Depends(get_db)):
 
 @app.post("/tasks", response_model=TaskResponse)
 def create_task(task: TaskCreate, db: Session = Depends(get_db)):
+    # Verificar se o sprint existe e se as datas da tarefa estão dentro do período do sprint
+    if task.sprint_id:
+        sprint = db.query(Sprint).filter(Sprint.id == task.sprint_id).first()
+        if not sprint:
+            raise HTTPException(status_code=404, detail="Sprint não encontrado")
+        
+        # Se a tarefa tiver datas de início e conclusão, verificar se estão dentro do período do sprint
+        if task.started_at and task.started_at < sprint.start_date:
+            raise HTTPException(status_code=400, detail="A data de início da tarefa não pode ser anterior à data de início do sprint")
+            
+        if task.completed_at and task.completed_at > sprint.end_date:
+            raise HTTPException(status_code=400, detail="A data de conclusão da tarefa não pode ser posterior à data de término do sprint")
+    
     db_task = Task(**task.dict(exclude_unset=True))
     db.add(db_task)
     db.commit()
