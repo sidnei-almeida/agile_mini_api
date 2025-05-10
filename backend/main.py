@@ -187,9 +187,6 @@ class TaskResponse(BaseModel):
         orm_mode = True  # Para compatibilidade com versões anteriores
         from_attributes = True  # Para Pydantic v2
 
-    allow_headers=["*"],
-)
-
 # Criar as tabelas no banco de dados
 Base.metadata.create_all(bind=engine)
 
