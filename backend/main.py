@@ -623,19 +623,34 @@ def seed_demo_data():
         # Data atual
         today = datetime.utcnow()
         
-        # Criar projeto demo
-        project_data = Project(
-            name="Projeto Demonstração",
-            description="Um projeto de demonstração para testar as funcionalidades do Agile Mini",
-            status="Ativo",
-            start_date=today,
-            end_date=today + timedelta(days=90)
-        )
-        
+        # Verificar se o projeto já existe
         db = SessionLocal()
-        db.add(project_data)
-        db.commit()
-        db.refresh(project_data)
+        existing_project = db.query(Project).filter(Project.name == "Projeto Demonstração").first()
+        
+        if existing_project:
+            # Usar o projeto existente
+            project_id = existing_project.id
+            # Atualizar as datas do projeto existente
+            existing_project.start_date = today
+            existing_project.end_date = today + timedelta(days=90)
+            existing_project.status = "Ativo"
+            db.commit()
+            db.refresh(existing_project)
+        else:
+            # Criar um novo projeto demo
+            project_data = Project(
+                name="Projeto Demonstração",
+                description="Um projeto de demonstração para testar as funcionalidades do Agile Mini",
+                status="Ativo",
+                start_date=today,
+                end_date=today + timedelta(days=90)
+            )
+            
+            db.add(project_data)
+            db.commit()
+            db.refresh(project_data)
+            
+            project_id = project_data.id
         
         # Criar sprints para o projeto
         sprints = []
