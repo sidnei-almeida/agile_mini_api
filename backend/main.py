@@ -187,18 +187,6 @@ class TaskResponse(BaseModel):
         orm_mode = True  # Para compatibilidade com versões anteriores
         from_attributes = True  # Para Pydantic v2
 
-# Instância do FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-
-app = FastAPI(title="API Agile Mini")
-
-# Configuração CORS simplificada
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
     allow_headers=["*"],
 )
 
