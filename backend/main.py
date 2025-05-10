@@ -26,6 +26,16 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 # Modelo SQLAlchemy
+class Project(Base):
+    __tablename__ = "projects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True)
+    description = Column(String, nullable=True)
+    status = Column(String, default="Ativo")  # Ativo, Concluído, Pausado
+    created_at = Column(DateTime, default=datetime.utcnow)
+    sprints = relationship("Sprint", back_populates="project_rel")
+
 class Sprint(Base):
     __tablename__ = "sprints"
 
@@ -34,7 +44,9 @@ class Sprint(Base):
     start_date = Column(DateTime, nullable=False)
     end_date = Column(DateTime, nullable=False)
     status = Column(String, default="Ativo")  # Ativo, Concluído, Planejado
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
     tasks = relationship("Task", back_populates="sprint_rel")
+    project_rel = relationship("Project", back_populates="sprints")
 
 class Task(Base):
     __tablename__ = "tasks"
@@ -53,11 +65,27 @@ class Task(Base):
     sprint_rel = relationship("Sprint", back_populates="tasks")
 
 # Modelos Pydantic
+class ProjectBase(BaseModel):
+    name: str
+    description: str = None
+    status: str = "Ativo"
+
+class ProjectCreate(ProjectBase):
+    pass
+
+class ProjectResponse(ProjectBase):
+    id: int
+    created_at: datetime = None
+    class Config:
+        orm_mode = True  # Para compatibilidade com versões anteriores
+        from_attributes = True  # Para Pydantic v2
+
 class SprintBase(BaseModel):
     name: str
     start_date: datetime
     end_date: datetime
     status: str = "Ativo"
+    project_id: int = None
 
 class SprintCreate(SprintBase):
     pass
@@ -219,6 +247,12 @@ def list_sprints(db: Session = Depends(get_db)):
 
 @app.post("/sprints", response_model=SprintResponse)
 def create_sprint(sprint: SprintCreate, db: Session = Depends(get_db)):
+    # Verificar se o projeto existe, se um project_id foi fornecido
+    if sprint.project_id:
+        project = db.query(Project).filter(Project.id == sprint.project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+    
     db_sprint = Sprint(**sprint.dict())
     db.add(db_sprint)
     db.commit()
@@ -471,3 +505,62 @@ def delete_task(task_id: int, db: Session = Depends(get_db)):
     db.delete(db_task)
     db.commit()
     return {"detail": "Task deleted"}
+
+@app.get("/")
+def read_root():
+    return {"message": "Bem-vindo à API Agile Mini!"} 
+
+# Endpoints para Projetos
+@app.get("/projects", response_model=List[ProjectResponse])
+def list_projects(db: Session = Depends(get_db)):
+    projects = db.query(Project).all()
+    return projects
+
+@app.post("/projects", response_model=ProjectResponse)
+def create_project(project: ProjectCreate, db: Session = Depends(get_db)):
+    db_project = Project(**project.dict())
+    db.add(db_project)
+    db.commit()
+    db.refresh(db_project)
+    return db_project
+
+@app.get("/projects/{project_id}", response_model=ProjectResponse)
+def get_project(project_id: int, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+@app.put("/projects/{project_id}", response_model=ProjectResponse)
+def update_project(project_id: int, project_data: ProjectCreate, db: Session = Depends(get_db)):
+    db_project = db.query(Project).filter(Project.id == project_id).first()
+    if not db_project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    for key, value in project_data.dict().items():
+        setattr(db_project, key, value)
+    
+    db.commit()
+    db.refresh(db_project)
+    return db_project
+
+@app.delete("/projects/{project_id}", response_model=dict)
+def delete_project(project_id: int, db: Session = Depends(get_db)):
+    db_project = db.query(Project).filter(Project.id == project_id).first()
+    if not db_project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    db.delete(db_project)
+    db.commit()
+    return {"message": "Project deleted successfully"}
+
+@app.get("/projects/{project_id}/sprints", response_model=List[SprintResponse])
+def get_project_sprints(project_id: int, db: Session = Depends(get_db)):
+    sprints = db.query(Sprint).filter(Sprint.project_id == project_id).all()
+    return sprints
+
+@app.get("/projects/{project_id}/tasks", response_model=List[TaskResponse])
+def get_project_tasks(project_id: int, db: Session = Depends(get_db)):
+    # Busca todas as tarefas associadas a sprints do projeto
+    tasks = db.query(Task).join(Sprint).filter(Sprint.project_id == project_id).all()
+    return tasks
