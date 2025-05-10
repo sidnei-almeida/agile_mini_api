@@ -563,6 +563,46 @@ def delete_task(task_id: int, db: Session = Depends(get_db)):
 def read_root():
     return {"message": "Bem-vindo à API Agile Mini!"} 
 
+@app.get("/migrate-db")
+def migrate_database():
+    """Endpoint para migrar o banco de dados e adicionar as colunas de data ao modelo Project."""
+    try:
+        # Conectar ao banco de dados
+        db = SessionLocal()
+        
+        # Verificar se as colunas já existem
+        import sqlalchemy as sa
+        from sqlalchemy import inspect
+        
+        inspector = inspect(db.bind)
+        columns = [column['name'] for column in inspector.get_columns('projects')]
+        
+        # Adicionar as colunas se elas não existirem
+        if 'start_date' not in columns:
+            # Executar ALTER TABLE para adicionar a coluna start_date
+            db.execute(sa.text("ALTER TABLE projects ADD COLUMN start_date TIMESTAMP"))
+            print("Coluna start_date adicionada com sucesso!")
+        
+        if 'end_date' not in columns:
+            # Executar ALTER TABLE para adicionar a coluna end_date
+            db.execute(sa.text("ALTER TABLE projects ADD COLUMN end_date TIMESTAMP"))
+            print("Coluna end_date adicionada com sucesso!")
+        
+        db.commit()
+        db.close()
+        
+        return {
+            "success": True,
+            "message": "Migração concluída com sucesso! Colunas start_date e end_date adicionadas à tabela projects."
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "message": f"Erro ao migrar banco de dados: {str(e)}",
+            "traceback": traceback.format_exc()
+        }
+
 @app.get("/seed-demo-data")
 def seed_demo_data():
     """Endpoint para criar dados de demonstração no banco de dados."""
