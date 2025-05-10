@@ -45,7 +45,7 @@ Agile Mini é um sistema leve e eficiente de gestão de projetos ágeis. Projeta
 
 1. Clone o repositório e navegue até a pasta
    ```bash
-   git clone [URL-DO-REPOSITORIO]
+   git clone https://github.com/sidnei-almeida/agile_mini_api
    cd agile_mini
    ```
 
@@ -76,6 +76,3 @@ Agile Mini é um sistema leve e eficiente de gestão de projetos ágeis. Projeta
 
 ## Contribuições
 Contribuições são bem-vindas! Sinta-se à vontade para abrir issues ou enviar pull requests.
-
-## Licença
-Este projeto está licenciado sob os termos da licença MIT.
