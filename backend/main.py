@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, Column, Integer, String, DateTime, Foreign
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.orm import sessionmaker
 from pydantic import BaseModel, validator
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Configuração do banco de dados (PostgreSQL no Render, SQLite local)
 # Verifica se estamos no Render (usando a variável de ambiente RENDER)
