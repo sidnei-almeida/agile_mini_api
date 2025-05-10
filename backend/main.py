@@ -563,6 +563,101 @@ def delete_task(task_id: int, db: Session = Depends(get_db)):
 def read_root():
     return {"message": "Bem-vindo à API Agile Mini!"} 
 
+@app.get("/seed-demo-data")
+def seed_demo_data():
+    """Endpoint para criar dados de demonstração no banco de dados."""
+    try:
+        # Data atual
+        today = datetime.utcnow()
+        
+        # Criar projeto demo
+        project_data = Project(
+            name="Projeto Demonstração",
+            description="Um projeto de demonstração para testar as funcionalidades do Agile Mini",
+            status="Ativo",
+            start_date=today,
+            end_date=today + timedelta(days=90)
+        )
+        
+        db = SessionLocal()
+        db.add(project_data)
+        db.commit()
+        db.refresh(project_data)
+        
+        # Criar sprints para o projeto
+        sprints = []
+        for i in range(3):
+            sprint_start = today + timedelta(days=i*14)
+            sprint_end = sprint_start + timedelta(days=13)
+            
+            sprint = Sprint(
+                name=f"Sprint {i+1}",
+                start_date=sprint_start,
+                end_date=sprint_end,
+                status="Ativo" if i == 0 else ("Planejado" if i > 0 else "Concluído"),
+                project_id=project_data.id
+            )
+            
+            db.add(sprint)
+            db.commit()
+            db.refresh(sprint)
+            sprints.append(sprint)
+        
+        # Criar tarefas para os sprints
+        statuses = ["A Fazer", "Em Andamento", "Concluído"]
+        priorities = ["Baixa", "Média", "Alta"]
+        tasks_count = 0
+        
+        for sprint in sprints:
+            for i in range(5):  # 5 tarefas por sprint
+                # Distribuir tarefas entre os status
+                import random
+                status_idx = random.randint(0, 2)
+                status = statuses[status_idx]
+                
+                # Definir datas com base no status
+                started_at = None
+                completed_at = None
+                
+                if status == "Em Andamento" or status == "Concluído":
+                    started_at = today - timedelta(days=random.randint(1, 5))
+                
+                if status == "Concluído":
+                    completed_at = today
+                
+                task = Task(
+                    title=f"Tarefa {i+1} do {sprint.name}",
+                    description=f"Esta é uma tarefa de demonstração para o sprint {sprint.name}",
+                    status=status,
+                    priority=random.choice(priorities),
+                    points=random.choice([1, 2, 3, 5, 8]),
+                    project=str(project_data.id),
+                    sprint_id=sprint.id,
+                    started_at=started_at,
+                    completed_at=completed_at
+                )
+                
+                db.add(task)
+                db.commit()
+                tasks_count += 1
+        
+        db.close()
+        
+        return {
+            "success": True,
+            "message": "Dados de demonstração criados com sucesso!",
+            "project": {"id": project_data.id, "name": project_data.name},
+            "sprints_count": len(sprints),
+            "tasks_count": tasks_count
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "message": f"Erro ao criar dados de demonstração: {str(e)}",
+            "traceback": traceback.format_exc()
+        }
+
 # Endpoints para Projetos
 @app.get("/projects", response_model=List[ProjectResponse])
 def list_projects(db: Session = Depends(get_db)):
