@@ -565,7 +565,7 @@ def read_root():
 
 @app.get("/migrate-db")
 def migrate_database():
-    """Endpoint para migrar o banco de dados e adicionar as colunas de data ao modelo Project."""
+    """Endpoint para migrar o banco de dados e adicionar todas as colunas necessárias."""
     try:
         # Conectar ao banco de dados
         db = SessionLocal()
@@ -575,18 +575,31 @@ def migrate_database():
         from sqlalchemy import inspect
         
         inspector = inspect(db.bind)
-        columns = [column['name'] for column in inspector.get_columns('projects')]
         
-        # Adicionar as colunas se elas não existirem
-        if 'start_date' not in columns:
-            # Executar ALTER TABLE para adicionar a coluna start_date
+        # Verificar e adicionar colunas na tabela projects
+        project_columns = [column['name'] for column in inspector.get_columns('projects')]
+        
+        if 'start_date' not in project_columns:
             db.execute(sa.text("ALTER TABLE projects ADD COLUMN start_date TIMESTAMP"))
-            print("Coluna start_date adicionada com sucesso!")
+            print("Coluna start_date adicionada à tabela projects!")
         
-        if 'end_date' not in columns:
-            # Executar ALTER TABLE para adicionar a coluna end_date
+        if 'end_date' not in project_columns:
             db.execute(sa.text("ALTER TABLE projects ADD COLUMN end_date TIMESTAMP"))
-            print("Coluna end_date adicionada com sucesso!")
+            print("Coluna end_date adicionada à tabela projects!")
+        
+        # Verificar e adicionar colunas na tabela sprints
+        sprint_columns = [column['name'] for column in inspector.get_columns('sprints')]
+        
+        if 'project_id' not in sprint_columns:
+            db.execute(sa.text("ALTER TABLE sprints ADD COLUMN project_id INTEGER"))
+            print("Coluna project_id adicionada à tabela sprints!")
+        
+        # Verificar e adicionar colunas na tabela tasks
+        task_columns = [column['name'] for column in inspector.get_columns('tasks')]
+        
+        if 'sprint_id' not in task_columns:
+            db.execute(sa.text("ALTER TABLE tasks ADD COLUMN sprint_id INTEGER"))
+            print("Coluna sprint_id adicionada à tabela tasks!")
         
         db.commit()
         db.close()
