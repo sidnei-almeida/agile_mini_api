@@ -652,6 +652,21 @@ def seed_demo_data():
             
             project_id = project_data.id
         
+        # Verificar se já existem sprints para este projeto
+        existing_sprints = db.query(Sprint).filter(Sprint.project_id == project_id).all()
+        
+        # Se existirem sprints, excluí-los para criar novos
+        if existing_sprints:
+            for sprint in existing_sprints:
+                # Verificar se existem tarefas associadas a este sprint
+                tasks = db.query(Task).filter(Task.sprint_id == sprint.id).all()
+                # Excluir as tarefas primeiro
+                for task in tasks:
+                    db.delete(task)
+                # Depois excluir o sprint
+                db.delete(sprint)
+            db.commit()
+        
         # Criar sprints para o projeto
         sprints = []
         for i in range(3):
@@ -663,7 +678,7 @@ def seed_demo_data():
                 start_date=sprint_start,
                 end_date=sprint_end,
                 status="Ativo" if i == 0 else ("Planejado" if i > 0 else "Concluído"),
-                project_id=project_data.id
+                project_id=project_id
             )
             
             db.add(sprint)
