@@ -714,7 +714,7 @@ def seed_demo_data():
                     status=status,
                     priority=random.choice(priorities),
                     points=random.choice([1, 2, 3, 5, 8]),
-                    project=str(project_data.id),
+                    project=str(project_id),
                     sprint_id=sprint.id,
                     started_at=started_at,
                     completed_at=completed_at
