@@ -1,10 +1,12 @@
 import os
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.orm import sessionmaker
 from pydantic import BaseModel, validator
 from datetime import datetime, timedelta
+from typing import List, Optional
 
 # Configuração do banco de dados (PostgreSQL no Render, SQLite local)
 # Verifica se estamos no Render (usando a variável de ambiente RENDER)
