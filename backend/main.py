@@ -729,7 +729,7 @@ def seed_demo_data():
         return {
             "success": True,
             "message": "Dados de demonstração criados com sucesso!",
-            "project": {"id": project_data.id, "name": project_data.name},
+            "project": {"id": project_id, "name": "Projeto Demonstração"},
             "sprints_count": len(sprints),
             "tasks_count": tasks_count
         }
